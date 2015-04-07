@@ -1,0 +1,13 @@
+# Read about fixtures at http://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  app_id: 
+  data_id: 
+  thread_count: 
+  run_time: 
+
+two:
+  app_id: 
+  data_id: 
+  thread_count: 
+  run_time: 

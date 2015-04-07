@@ -1,0 +1,13 @@
+# Read about fixtures at http://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  function_id: 
+  run_time: 
+  run_time_no_calls: 
+  calls: 
+
+two:
+  function_id: 
+  run_time: 
+  run_time_no_calls: 
+  calls: 
