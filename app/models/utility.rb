@@ -10,13 +10,15 @@ class Utility
   end  
   
   
+  
   def parse_files
     `scp -r mwoffendin@xstack.exascale-tech.com:~/profile_output/* ../profile_output`
     Dir.entries("../profile_output")[2..-1].each do |file|
       parse_file(file)
     end
   end 
-   
+  
+  
   
   def parse_file(file)
     f = File.open("../profile_output/#{file}")
@@ -58,11 +60,12 @@ class Utility
     dataset = DataSet.where(name: info[3], size: info[2].to_i).first
     dataset = DataSet.create(name: info[3], size: info[2].to_i) unless dataset
     
-    run = Run.create(app_id: app.id, data_set_id: dataset.id, thread_count: info.last.split('.').first.to_i, run_time: total_time.to_i)
-    
+    run = Run.create(app_id: app.id, data_set_id: dataset.id, 
+          thread_count: info.last.split('.').first.to_i, run_time: total_time.to_i)
     
     parse_data(data, run.id)
   end
+  
   
   
   
@@ -80,12 +83,14 @@ class Utility
   end
   
   
-    
+  
+  
   def parallel_scalability_bottlenecks(app_name, margin_of_error=1)
     bottlenecks = []
     suspected_bottlenecks = []
     app = App.where(name: app_name).pluck(:id)
     runs = Run.where("app_id IN (?)",app).order("thread_count")
+    times = runs.map {|run| run.run_time}
     
     # Make sure we have enough data to make any conclusions
     return insufficient_data if runs.blank? 
@@ -99,26 +104,65 @@ class Utility
     # Go through each function profiled
     runs.first.entries.each do |entry|
       # Get all entries for that function
-      entries = Entry.where("run_id IN (?) AND function_id = ?", runs.map{|r| r.id}, entry.function_id).joins(:run).order('runs.thread_count')
-      # If the entry's percent running time increases as the thread count increases, it's a bottleneck
-      self_percents = entries.map{|e| e.self_percent}
-      self_percents.each do |percent|
-        if percent > self_percents[0] + margin_of_error
-          bottlenecks << {function: entry.function.name, 
-                          growth: percent - self_percents[0] }
-          break
+      # We exit nested iterations via an exception
+      begin
+        # Get all entries for that function
+        entries = Entry.where("run_id IN (?) AND function_id = ?", runs.map{|r| r.id},
+                  entry.function_id).joins(:run).order('runs.thread_count')
+        
+        self_percents = []
+        total_percents = []
+        entries.each_with_index { |e, i| self_percents << e.adjusted_self_percent(times[i]) }
+        entries.each_with_index { |e, i| total_percents << e.adjusted_total_percent(times[i]) }
+        
+        # If the entry's percent running time increases as the thread count increases, 
+        # it's a bottleneck
+        # When we find a suspected bottleneck, we add it to the list and remove its time from
+        # the total run's time. This is because if one function's time increased dramatically
+        # then all other functions would appear to have decreased, even if they had increased
+        # but to a lesser extent.
+        # TODO: re-iterate through all the entries to get anything we missed.
+        self_percents.each_with_index do |percent, index|
+          # Checks to see if the function is growing.
+          if percent > self_percents[0] + margin_of_error
+            bottlenecks << {function: entry.function.name, 
+                            growth: percent - self_percents[0] }
+            times = times.map {|time| time - entries[index].run_time}
+            throw Exception.new('done')
+          end
         end
-      end
-      total_percents = entries.map{|e| e.total_percent}
-      total_percents.each do |percent|
-        if percent > total_percents[0] + margin_of_error
-          suspected_bottlenecks << {function: entry.function.name, 
-                                    growth: percent - total_percents[0] }
-          break
+        
+        total_percents.each_with_index do |percent, index|
+          if percent > total_percents[0] + margin_of_error
+            suspected_bottlenecks << {function: entry.function.name, 
+                                      growth: percent - total_percents[0] }
+            times = times.map {|time| time - entries[index].run_time}
+            throw Exception.new('done')
+          end
         end
+      # Exit nested loops here
+      rescue 
       end
     end
+    
     suspected_bottlenecks -= bottlenecks
+    
+    unless bottlenecks.blank?
+      puts "Self Bottlenecks"
+      puts "Function\t\tPercent percentage growth"
+      bottlenecks.each do |bottleneck|
+        puts "#{bottleneck[:function]}\t\t#{bottleneck[:growth]}"
+      end
+    end
+    
+    unless suspected_bottlenecks.blank?
+      puts "\nChildren Bottlenecks"
+      puts "Function\t\tPercent percentage growth"
+      suspected_bottlenecks.each do |suspect|
+        puts "#{suspect[:function]}\t\t#{suspect[:growth]}"
+      end
+    end
+    
     return {bottlenecks: bottlenecks, suspected: suspected_bottlenecks}
   end
   
@@ -130,13 +174,13 @@ class Utility
     suspected_bottlenecks = []
     app = App.where(name: app_name).pluck(:id)
     runs = Run.where("app_id IN (?)", app).joins(:data_set).order("data_sets.size")
-    
     times = runs.map {|run| run.run_time}
     
     # Make sure we have enough data to make any conclusions
     return insufficient_data if runs.blank? 
     datasets = {}
     runs.each do |run|
+      # Check for duplicates and remove them
       runs -= run if datasets[run.data_set.size]
       datasets[run.data_set.size] = true
     end
@@ -196,7 +240,7 @@ class Utility
     end
     
     unless suspected_bottlenecks.blank?
-      puts "Children Bottlenecks"
+      puts "\nChildren Bottlenecks"
       puts "Function\t\tPercent percentage growth"
       suspected_bottlenecks.each do |suspect|
         puts "#{suspect[:function]}\t\t#{suspect[:growth]}"
@@ -205,6 +249,7 @@ class Utility
     
     return {bottlenecks: bottlenecks, suspected: suspected_bottlenecks}
   end
+  
   
   
   

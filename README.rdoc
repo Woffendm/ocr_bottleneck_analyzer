@@ -1,28 +1,23 @@
 == README
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+You need an ssh key set up to xstack.
+You'll need to change some things to match your install location for ocr.
 
-Things you may want to cover:
+Requires ruby on rails
 
-* Ruby version
+How to use:
+On xstack gather profiling data: 
+  ruby ~/xstack/ocr/scripts/Profiler/run.rb
+In this project's directory, recreate the database:
+  rake db:drop
+  rake db:create
+  rake db:migrate
+In this project's directory enter the rails console: 
+  rails c
+Gather profiling data to local machine: 
+  Utility.new.parse_files
+Check for data scalability bottlenecks ('sar', 'fibonacci', 'cholesky'):
+  Utility.new.parallel_scalability_bottlenecks(APPNAME)
+  Utility.new.dataset_scalability_bottlenecks(APPNAME)
 
-* System dependencies
-
-* Configuration
-
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
-
-
-Please feel free to use a different markup language if you do not plan to run
-<tt>rake doc:app</tt>.
+These methods look at the amount of total cpu time spent in each function and calculates its percentage of the program's total cpu time. If the percentage is growing as the size of the data set or number of threads increases, then it's considered a bottleneck. 
